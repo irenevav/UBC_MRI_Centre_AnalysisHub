@@ -1,1 +1,1 @@
-The documents contain information on how to perform certain image processing tasks.
+The documents contain information on how to perform certain image processing tasks. The Powerpoint files are the slides presented at the monthly get together of the UBC MRI Reserach Centre's analysis resources group.
