@@ -1,0 +1,47 @@
+How to do basic DTI analysis
+
+1. First you need to convert the dicoms into .nii files. This should be done for both the DTI and reverse B0 data.
+
+dcm2niix dicomfiles
+
+2. Grab the B0 volume from the DTI data (and the reverse Bo data if needed)
+
+fslroi DTI.nii.gz DTI_B0.nii.gz 0 -1 0 -1 0 -1 0 1
+
+The choice of parameters depends on whether you have your B0 volumes at the beginning or end of the DTI dataset. Here, I've assumed the beginning (ie the last entry [0 1] says to grab the 0th volume and include only 1 volume. [0 -1] says to include all the data so for x, y and z we're including all the data.
+Another note is that if the dataset has an odd number of slices then you will need to remove one. This can also be done with fslroi but in the z component.Make sure you remove it for the entire DTI dataset as well as the reverse B0 data.
+
+3. Merge the 2 B0 files into one
+
+fslmerge -t DTI_B0_all DTI_B0 DTI_rev_B0
+
+4. Start the topup analsyis procedure
+
+First you will need to create a parameter file that tells the script how the data was collected. My acqparams.txt file looks like
+
+0  1 0 0.08
+0 -1 0 0.08
+
+As long as the MR parameters are the same between the 2 B0 files then it doesn't really matter what the last value is. (It should be equal to the total readout time which can sometimmes be found in the json file.) The 1 and -1 indicate the direction of the phase encode.
+
+topup --imain=DTI_B0_all --datain=acqparams.txt --config=b02b0.cnf --out=topup_PA_AP_B0 --fout=topup_PA_AP_B0_field --iout=topup_PA_AP_B0_unwrapped
+applytopup --imain=DTI_B0,DTI_rev_B0 --inindex=1,2 --datain=acqparams.txt --topup=topup_PA_AP_B0 --out=topup_hifi_nodiff
+
+5. Make a brain mask
+
+bet topup_hifi_nodiff topup_hifi_nodiff_brain -m -f 0.2
+
+6. Do eddy current correction
+
+Need to create a file called index.txt which tells eddy what pahse direction the main DTI data was acquired in. As ususally the DTI data is collected all in the same direction as DTI_B0 then it's basically a file containing 1 for each gradient direction. (So for the 128 direction data, it's a file listing 1 128 times)
+
+1 1 1 1 1 1 1 1 ... (continue for # of volumes in DTI.nii.gz)
+
+eddy_openmp --imain=DTI --mask=topup_hifi_nodiff_brain_mask --index=index.txt --acqp=acqparams.txt --bvals=DTI.bval --bvecs=DTI.bvec --out=ECC --ref_scan_no=0 --ol_nstd=4 --topup=topup_PA_AP_B0
+
+7. Calculate DTI metrics
+
+dtifit --data=ECC --out=DTI --mask=topup_hifi_nodiff_brain_mask --bvecs=ECC.eddy_rotated_bvecs --bvals=DTI.bval
+
+You will get a list of outputs DTI_... (because you specified the --out=DTI and it appends the results to that)
+

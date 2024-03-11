@@ -1,0 +1,38 @@
+How to analyse MWI
+
+1. First you need to convert the dicoms into .nii files
+
+dcm2niix dicomfiles
+
+2. If (and this is likely the case) each echo is separate then you need to create a 4D volume of all the echoes (note that I'm assuming 48 echoes but if you have a different number then you must use that in these commands)
+
+cp datafile_e1.nii.gz GRASE.nii.gz
+for i in {2..48}; do
+fslmerge -t GRASE.nii.gz GRASE.nii.gz datafile_e${i}.nii.gz
+done
+
+This will create a file (GRASE.nii.gz) that has all the echoes combined.
+
+3. To calculate the MWF maps we use a program called DECAES (https://github.com/jondeuce/DECAES.jl). It runs in the programming language julia so you might need medIT to install that. Then you can grab the program off the github and run it. There's quite a bit of documentation for DECAES so it's worth some reading. 
+
+julia --threads=auto decaes.jl -- GRASE.nii.gz --T2map --T2part --TE 8e-3 --nT2 40 --T2Range 10e-3 2.0 --SPWin 9e-3 40e-3 --MPWin 40e-3 200e-3 --Reg chi2 --Chi2Factor 1.02
+
+Note: you need to input the correct TE. For us it's 8ms but I'm not sure what yours is.
+This script will produce a few outputs but the important one is GRASE.t2parts.mat
+
+4. Convert the matlab file into a .nii file
+
+In matlab:
+load('GRASE.t2parts.mat');
+sfrmap=make_nii(sfr);
+save_nii(sfrmap,'GRASE_MWF.nii');
+
+Note:  a couple of these matlab functions may not be standard. I'm using the version that's in /data/workgroup/matlab/testing_functions on our server.
+
+5. I usually have to do a little tweak to the MWF file to get the right dimensions
+
+gzip GRASE_MWF.nii
+fslcpgeom datafile_e1.nii.gz GRASE_MWF.nii.gz
+
+6. After this I'll do registration and ROI creation. I'll share those commands when I get to them in my analysis which is likely after we collect our POST data.
+
